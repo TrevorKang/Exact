@@ -334,11 +334,11 @@ class MKTFileType(FileType):
 
 class VideoMP4FileType(FileType):
     magic_number = b'\x00\x00\x00\x18'
-    extensions = ['mp4','mov','avi','mkv']
+    extensions = 'mp4'
     handler = ReadableMP4Dataset
     magic_number_offset = 0
 
-SupportedFileTypes = [MKTFileType, DicomFileType, MiraxFileType, PhilipsISyntaxFileType, PNGFileType, JPEGEXIFFileType, JPEGJFIFFileType, OlympusVSIFileType, NormalTiffFileType, BigTiffFileType, ZeissCZIFile]
+SupportedFileTypes = [MKTFileType, VideoMP4FileType, DicomFileType, MiraxFileType, PhilipsISyntaxFileType, PNGFileType, JPEGEXIFFileType, JPEGJFIFFileType, OlympusVSIFileType, NormalTiffFileType, BigTiffFileType, ZeissCZIFile]
 
 
 
@@ -360,9 +360,10 @@ def getSlideHandler(path):
             if ftype.magic_number_offset not in magic_number:
                 f.seek(ftype.magic_number_offset)
                 magic_number[ftype.magic_number_offset] = f.read(4)
+                print('At offset: ',ftype.magic_number_offset,'it is', [hex(x) for x in magic_number[ftype.magic_number_offset]])
             if (magic_number[ftype.magic_number_offset]==ftype.magic_number):
                 candidates.append(ftype)
-
+                print('Match for file type:', ftype)
         if (len(candidates)>0):
             for ftype in candidates:
                 if (path.split('.')[-1].lower() in ftype.extensions):
