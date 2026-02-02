@@ -333,10 +333,10 @@ class MKTFileType(FileType):
     handler = ReadableCellVizioMKTDataset
 
 class VideoMP4FileType(FileType):
-    magic_number = b'\x00\x00\x00\x18'
-    extensions = 'mp4'
+    magic_number = b'\x66\x74\x79\x70'
+    extensions = ['mp4']
+    magic_number_offset = 4
     handler = ReadableMP4Dataset
-    magic_number_offset = 0
 
 SupportedFileTypes = [MKTFileType, VideoMP4FileType, DicomFileType, MiraxFileType, PhilipsISyntaxFileType, PNGFileType, JPEGEXIFFileType, JPEGJFIFFileType, OlympusVSIFileType, NormalTiffFileType, BigTiffFileType, ZeissCZIFile]
 

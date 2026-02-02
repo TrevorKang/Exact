@@ -29,12 +29,20 @@ class ReadableMP4Dataset(openslide.ImageSlide):
         self.fps = cap.get(cv2.CAP_PROP_FPS)
 
         # Video codec info
-        fourcc = int(self.cap.get(cv2.CAP_PROP_FOURCC))
+        fourcc = int(cap.get(cv2.CAP_PROP_FOURCC))
         self.codec = "".join([chr((fourcc >> 8 * i) & 0xFF) for i in range(4)])
 
         cap.release()
 
         self._dimensions = (self._width, self._height)
+
+        self.properties = {
+            openslide.PROPERTY_NAME_BACKGROUND_COLOR: '000000',
+            openslide.PROPERTY_NAME_MPP_X: 0,
+            openslide.PROPERTY_NAME_MPP_Y: 0,
+            openslide.PROPERTY_NAME_OBJECTIVE_POWER: 1,
+            openslide.PROPERTY_NAME_VENDOR: 'MP4'
+        }
     
     def __reduce__(self):
         return (self.__class__, (self.slide_path,))
@@ -154,7 +162,7 @@ if __name__ == "__main__":
     slide = ReadableMP4Dataset(video_path)
     print(f"Video dimensions: {slide.dimensions}")
     print(f"Number of frames: {slide.nFrames}")
-    thumbnail = slide.get_thumbnail((256, 256))
+    thumbnail = slide.get_thumbnail((512, 256))
     
     plt.imshow(thumbnail)
     plt.axis('off')
