@@ -36,17 +36,28 @@ class ReadableMP4Dataset(openslide.ImageSlide):
 
         self._dimensions = (self._width, self._height)
 
-        self.properties = {
+        # self.properties = {
+        #     openslide.PROPERTY_NAME_BACKGROUND_COLOR: '000000',
+        #     openslide.PROPERTY_NAME_MPP_X: 0,
+        #     openslide.PROPERTY_NAME_MPP_Y: 0,
+        #     openslide.PROPERTY_NAME_OBJECTIVE_POWER: 1,
+        #     openslide.PROPERTY_NAME_VENDOR: 'MP4'
+        # }
+    
+    def __reduce__(self):
+        return (self.__class__, (self.slide_path,))
+    
+    @property
+    def properties(self):
+        return {
             openslide.PROPERTY_NAME_BACKGROUND_COLOR: '000000',
             openslide.PROPERTY_NAME_MPP_X: 0,
             openslide.PROPERTY_NAME_MPP_Y: 0,
             openslide.PROPERTY_NAME_OBJECTIVE_POWER: 1,
             openslide.PROPERTY_NAME_VENDOR: 'MP4'
         }
-    
-    def __reduce__(self):
-        return (self.__class__, (self.slide_path,))
-    
+
+
     @property
     def dimensions(self):
         return self._dimensions
