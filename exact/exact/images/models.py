@@ -27,7 +27,8 @@ import json
 from openslide import OpenSlide, open_slide
 from czifile import czi2tif
 from util.cellvizio import ReadableCellVizioMKTDataset # just until data access is pip installable
-
+# for video handling
+from util.video_handler import ReadableMP4Dataset
 from PIL import Image as PIL_Image
 
 from datetime import datetime

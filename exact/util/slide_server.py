@@ -21,6 +21,7 @@ import openslide
 from PIL import Image
 import numpy as np
 from util.cellvizio import ReadableCellVizioMKTDataset
+from util.video_handler import ReadableMP4Dataset
 from openslide import OpenSlideError
 import tifffile
 from util.tiffzstack import OMETiffSlide, OMETiffZStack
@@ -331,7 +332,11 @@ class MKTFileType(FileType):
     extensions = 'mkt'
     handler = ReadableCellVizioMKTDataset
 
-
+class VideoMP4FileType(FileType):
+    magic_number = b'\x00\x00\x00\x18'
+    extensions = ['mp4','mov','avi','mkv']
+    handler = ReadableMP4Dataset
+    magic_number_offset = 0
 
 SupportedFileTypes = [MKTFileType, DicomFileType, MiraxFileType, PhilipsISyntaxFileType, PNGFileType, JPEGEXIFFileType, JPEGJFIFFileType, OlympusVSIFileType, NormalTiffFileType, BigTiffFileType, ZeissCZIFile]
 
