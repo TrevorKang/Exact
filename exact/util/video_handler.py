@@ -14,11 +14,21 @@ except ImportError:
     from enums import FrameType
 
 import matplotlib.pyplot as plt
+import threading
+
+# TODO: implement frame caching for performance improvement
+# TODO: test AVI support as well
 
 
 class ReadableMP4Dataset(openslide.ImageSlide):
-    def __init__(self, filename):
+    def __init__(self, filename, cache_size=32):
         self.slide_path = filename
+
+        self._cap = None
+        self._cap_lock = threading.Lock()
+        self._frame_cache = {}
+        self._cache_size = cache_size  
+
         cap = cv2.VideoCapture(filename)
         if not cap.isOpened():
             raise OpenSlideError(f"Could not open video file: {filename}")
@@ -47,6 +57,22 @@ class ReadableMP4Dataset(openslide.ImageSlide):
     def __reduce__(self):
         return (self.__class__, (self.slide_path,))
     
+    def close(self):
+        with self._cap_lock:
+            if self._cap is not None:
+                self._cap.release()
+                self._cap = None
+        self._frame_cache.clear()
+    
+    def __del__(self):
+        self.close()
+
+    def __enter__(self):
+        return self
+    
+    def __exit__(self, *args):
+        self.close()
+
     @property
     def properties(self):
         return {
@@ -88,6 +114,28 @@ class ReadableMP4Dataset(openslide.ImageSlide):
     def level_count(self):
         return 1 
 
+    def _get_capture(self):
+        if self._cap is None or not self._cap.isOpened():
+            self._cap = cv2.VideoCapture(self.slide_path)
+        return self._cap
+
+    def _read_frame(self, frame_idx):
+        if frame_idx in self._frame_cache:
+            return self._frame_cache[frame_idx]
+        with self._cap_lock:
+            cap = self._get_capture()
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+            success, img = cap.read()
+            if not success:
+                return None
+            # Convert BGR to RGBA
+            img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGBA)
+            if len(self._frame_cache) >= self._cache_size:  # FIFO
+                oldest = next(iter(self._frame_cache))
+                del self._frame_cache[oldest]
+            self._frame_cache[frame_idx] = img_rgb
+            return img_rgb
+
 
     def get_thumbnail(self, size):
         return self.read_region((0,0),0, self.dimensions).resize(size)
@@ -112,19 +160,23 @@ class ReadableMP4Dataset(openslide.ImageSlide):
 
         # Clamp frame index
         frame = max(0, min(frame, self.numberOfLayers - 1))
-
-        # Re-open capture for the read (or use a pooled capture for performance)
-        cap = cv2.VideoCapture(self.slide_path)
-        cap.set(cv2.CAP_PROP_POS_FRAMES, frame)
-        success, img = cap.read()
-        cap.release()
-
-        if not success:
+        img_rgb = self._read_frame(frame)
+        if img_rgb is None:
             # Return a transparent tile if frame read fails
             return Image.new("RGBA", size, (0, 0, 0, 0))
+        
+        # # Re-open capture for the read (or use a pooled capture for performance)
+        # cap = cv2.VideoCapture(self.slide_path)
+        # cap.set(cv2.CAP_PROP_POS_FRAMES, frame)
+        # success, img = cap.read()
+        # cap.release()
 
-        # Convert BGR (OpenCV) to RGBA (OpenSlide/PIL)
-        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGBA)
+        # if not success:
+        #     # Return a transparent tile if frame read fails
+        #     return Image.new("RGBA", size, (0, 0, 0, 0))
+
+        # # Convert BGR (OpenCV) to RGBA (OpenSlide/PIL)
+        # img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGBA)
         
         # Calculate boundaries (handling out-of-bounds requests)
         x, y = location
