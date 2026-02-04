@@ -16,6 +16,7 @@ except ImportError:
     from enums import FrameType
 
 # TODO: implement frame caching for performance improvement (FIFO or LRU?)
+# TODO: memory? limit for caching?
 # TODO: test AVI support as well 
 
 
@@ -40,9 +41,6 @@ class ReadableMP4Dataset(openslide.ImageSlide):
         self.numberOfLayers = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))    # total number of frames
         self.fps = cap.get(cv2.CAP_PROP_FPS)
 
-        # Video codec info
-        # fourcc = int(cap.get(cv2.CAP_PROP_FOURCC))
-        # self.codec = "".join([chr((fourcc >> 8 * i) & 0xFF) for i in range(4)])
         cap.release()
 
         self._dimensions = (self._width, self._height)
@@ -122,7 +120,6 @@ class ReadableMP4Dataset(openslide.ImageSlide):
             self._cap = cv2.VideoCapture(self.slide_path)
         return self._cap
     
-    # TODO: LRU caching
     def _frame_num_bytes(self, frame_arr: np.ndarray) -> int:
         """
         
@@ -136,7 +133,6 @@ class ReadableMP4Dataset(openslide.ImageSlide):
     
     def _evict_if_needed(self):
         """
-
         Evict frames by LRU
         """
         
@@ -150,7 +146,13 @@ class ReadableMP4Dataset(openslide.ImageSlide):
                 old_idx, old_frame = self._frame_cache.popitem(last=False)
                 self._cache_bytes -= self._frame_num_bytes(old_frame)
 
-    def _read_frame(self, frame_idx):
+    def _read_frame(self, frame_idx: int):
+        """
+        Before reading the frame, check the cache first with thread safety. 
+        Followed by LRU cache eviction policy.
+        
+        :param frame_idx: 
+        """
         # if frame_idx in self._frame_cache:
         #     return self._frame_cache[frame_idx]
         # with self._cap_lock:
