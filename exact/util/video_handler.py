@@ -1,6 +1,5 @@
 """
 Scripts for MP4 files's support
-Reference: https://github.com/DeepMicroscopy/Exact/commit/4d52b614fa41328bf08367d99e088c1e838fb05a
 
 """
 import threading
@@ -192,10 +191,13 @@ class ReadableMP4Dataset(openslide.ImageSlide):
         return self.read_region((0,0),0, self.dimensions).resize(size)
     
     def read_region(self, location, level, size, frame=0):
+        
         """
         Reads a region from a specific video frame. 
-        Return a PIL.Image containing the contents of the region.
+        Return a PIL.Image containing the contents of the region. 
+        Reference: https://github.com/DeepMicroscopy/Exact/commit/4d52b614fa41328bf08367d99e088c1e838fb05a
 
+        
         location: (x, y) tuple giving the top left pixel in the level 0
                   reference frame.
         level:    the level number.
