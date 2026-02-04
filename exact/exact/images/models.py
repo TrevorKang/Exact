@@ -193,7 +193,7 @@ class Image(models.Model):
                     os.remove(str(path_temp))
                     self.filename = path.name
                 # Videos
-                elif Path(path).suffix.lower().endswith(".mp4"):
+                elif Path(path).suffix.lower().endswith(".mp4"):    # TODO: add avi support as well
                     reader = ReadableMP4Dataset(str(path))
                     self.frames = reader.nFrames
                     self.width, self.height = reader.dimensions
