@@ -3,6 +3,9 @@ Scripts for MP4 files's support
 Reference: https://github.com/DeepMicroscopy/Exact/commit/4d52b614fa41328bf08367d99e088c1e838fb05a
 
 """
+import threading
+from collections import OrderedDict
+
 import openslide
 from openslide import OpenSlideError
 import numpy as np
@@ -13,21 +16,21 @@ try :
 except ImportError:
     from enums import FrameType
 
-import matplotlib.pyplot as plt
-import threading
-
-# TODO: implement frame caching for performance improvement
-# TODO: test AVI support as well
+# TODO: implement frame caching for performance improvement (FIFO or LRU?)
+# TODO: test AVI support as well 
 
 
 class ReadableMP4Dataset(openslide.ImageSlide):
-    def __init__(self, filename, cache_size=32):
+    def __init__(self, filename, cache_size=32, max_cache_bytes=None):
         self.slide_path = filename
 
         self._cap = None
-        self._cap_lock = threading.Lock()
-        self._frame_cache = {}
-        self._cache_size = cache_size  
+        self._cap_lock = threading.RLock()  
+        self._frame_cache = OrderedDict()
+        self._cache_size = cache_size
+
+        self._max_cache_bytes = max_cache_bytes # optional based on memory
+        self._cache_bytes = 0
 
         cap = cv2.VideoCapture(filename)
         if not cap.isOpened():
@@ -39,9 +42,8 @@ class ReadableMP4Dataset(openslide.ImageSlide):
         self.fps = cap.get(cv2.CAP_PROP_FPS)
 
         # Video codec info
-        fourcc = int(cap.get(cv2.CAP_PROP_FOURCC))
-        self.codec = "".join([chr((fourcc >> 8 * i) & 0xFF) for i in range(4)])
-
+        # fourcc = int(cap.get(cv2.CAP_PROP_FOURCC))
+        # self.codec = "".join([chr((fourcc >> 8 * i) & 0xFF) for i in range(4)])
         cap.release()
 
         self._dimensions = (self._width, self._height)
@@ -62,7 +64,9 @@ class ReadableMP4Dataset(openslide.ImageSlide):
             if self._cap is not None:
                 self._cap.release()
                 self._cap = None
-        self._frame_cache.clear()
+
+            self._frame_cache.clear()
+            self._cache_bytes = 0 
     
     def __del__(self):
         self.close()
@@ -118,11 +122,57 @@ class ReadableMP4Dataset(openslide.ImageSlide):
         if self._cap is None or not self._cap.isOpened():
             self._cap = cv2.VideoCapture(self.slide_path)
         return self._cap
+    
+    # TODO: LRU caching
+    def _frame_num_bytes(self, frame_arr: np.ndarray) -> int:
+        """
+        
+        Calculate the number of bytes used by a frame array.
+        :param frame_arr: Description
+        """
+        try:
+            return int(frame_arr.nbytes)
+        except Exception:
+            return 0
+    
+    def _evict_if_needed(self):
+        """
+
+        Evict frames by LRU
+        """
+        
+        # Evict frames if exceeding max frame count
+        while self._cache_size is not None and len(self._frame_cache) > self._cache_size:
+            old_idx, old_frame = self._frame_cache.popitem(last=False)
+            self._cache_bytes -= self._frame_num_bytes(old_frame)
+        # Evict based on byte size
+        if self._max_cache_bytes is not None:
+            while self._cache_bytes > self._max_cache_bytes and len(self._frame_cache) > 0:
+                old_idx, old_frame = self._frame_cache.popitem(last=False)
+                self._cache_bytes -= self._frame_num_bytes(old_frame)
 
     def _read_frame(self, frame_idx):
-        if frame_idx in self._frame_cache:
-            return self._frame_cache[frame_idx]
+        # if frame_idx in self._frame_cache:
+        #     return self._frame_cache[frame_idx]
+        # with self._cap_lock:
+        #     cap = self._get_capture()
+        #     cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+        #     success, img = cap.read()
+        #     if not success:
+        #         return None
+        #     # Convert BGR to RGBA
+        #     img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGBA)
+        #     if len(self._frame_cache) >= self._cache_size:  # FIFO
+        #         oldest = next(iter(self._frame_cache))
+        #         del self._frame_cache[oldest]
+        #     self._frame_cache[frame_idx] = img_rgb
+        #     return img_rgb
         with self._cap_lock:
+            cached = self._frame_cache.get(frame_idx)
+            if cached is not None:
+                self._frame_cache.move_to_end(frame_idx)
+                return cached
+            
             cap = self._get_capture()
             cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
             success, img = cap.read()
@@ -130,10 +180,11 @@ class ReadableMP4Dataset(openslide.ImageSlide):
                 return None
             # Convert BGR to RGBA
             img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGBA)
-            if len(self._frame_cache) >= self._cache_size:  # FIFO
-                oldest = next(iter(self._frame_cache))
-                del self._frame_cache[oldest]
             self._frame_cache[frame_idx] = img_rgb
+            self._frame_cache.move_to_end(frame_idx, last=True)
+            self._cache_bytes += self._frame_num_bytes(img_rgb)
+            
+            self._evict_if_needed()
             return img_rgb
 
 
@@ -220,14 +271,14 @@ class ReadableMP4Dataset(openslide.ImageSlide):
         """Convert frame index to time in seconds."""
         return frame_idx / self.fps if self.fps > 0 else 0
     
-if __name__ == "__main__":
-    video_path = "./test_mp4/test.mp4"
-    slide = ReadableMP4Dataset(video_path)
-    print(f"Video dimensions: {slide.dimensions}")
-    print(f"Number of frames: {slide.nFrames}")
-    thumbnail = slide.get_thumbnail((512, 256))
+# if __name__ == "__main__":
+#     video_path = "./test_mp4/test.mp4"
+#     slide = ReadableMP4Dataset(video_path)
+#     print(f"Video dimensions: {slide.dimensions}")
+#     print(f"Number of frames: {slide.nFrames}")
+#     thumbnail = slide.get_thumbnail((512, 256))
     
-    plt.imshow(thumbnail)
-    plt.axis('off')
-    plt.savefig('thumbnail.png', bbox_inches='tight')
-    print("Saved to thumbnail.png")
+#     plt.imshow(thumbnail)
+#     plt.axis('off')
+#     plt.savefig('thumbnail.png', bbox_inches='tight')
+#     print("Saved to thumbnail.png")
